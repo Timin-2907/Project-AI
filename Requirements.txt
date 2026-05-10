@@ -9,3 +9,4 @@ pydantic[email]==2.7.1
 pydantic-settings==2.2.1
 aiosmtplib==3.0.1
 python-dotenv==1.0.1
+redis==5.0.1
