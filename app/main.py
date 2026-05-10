@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 import uuid
@@ -9,7 +9,7 @@ app = FastAPI()
 users = {}
 tokens = {}
 exams = {}
-folders = {}  # folder_id -> folder data
+folders = {}
 folder_id_counter = {"val": 1}
 
 # ===== Models =====
@@ -36,6 +36,9 @@ class FolderCreate(BaseModel):
 class FolderMove(BaseModel):
     target_parent_id: Optional[int] = None
 
+class FolderRename(BaseModel):
+    name: str
+
 # ===== Auth =====
 def get_current_user(token: str):
     if token not in tokens:
@@ -52,7 +55,6 @@ def get_parent_path(parent_id: Optional[int]) -> str:
     return parent["path"]
 
 def is_descendant(folder_id: int, target_id: int) -> bool:
-    """Kiểm tra target_id có phải con cháu của folder_id không."""
     visited = set()
     current_id = target_id
     while current_id is not None:
@@ -68,7 +70,6 @@ def is_descendant(folder_id: int, target_id: int) -> bool:
     return False
 
 def update_paths_recursive(folder_id: int, old_prefix: str, new_prefix: str):
-    """Cập nhật path của folder và toàn bộ con cháu."""
     folder = folders.get(folder_id)
     if not folder:
         return
@@ -128,18 +129,13 @@ def submit_exam(data: SubmitExamRequest, token: str):
 @app.post("/folders")
 def create_folder(data: FolderCreate, token: str):
     user = get_current_user(token)
-
-    # Kiểm tra trùng tên trong cùng cha
     for f in folders.values():
         if f["parent_id"] == data.parent_id and f["name"] == data.name:
             raise HTTPException(status_code=409, detail="Folder name already exists in this location")
-
     parent_path = get_parent_path(data.parent_id)
     path = f"{parent_path}/{data.name}"
-
     fid = folder_id_counter["val"]
     folder_id_counter["val"] += 1
-
     folders[fid] = {
         "id": fid,
         "name": data.name,
@@ -166,9 +162,9 @@ def get_folder(folder_id: int, token: str):
     children = [f for f in folders.values() if f["parent_id"] == folder_id]
     return {"folder": folder, "children": children}
 
-# 8. ⭐ Di chuyển thư mục
-@app.patch("/folders/{folder_id}/move")
-def move_folder(folder_id: int, data: FolderMove, token: str):
+# 8. Đổi tên thư mục
+@app.patch("/folders/{folder_id}/rename")
+def rename_folder(folder_id: int, data: FolderRename, token: str):
     user = get_current_user(token)
 
     # Folder tồn tại?
@@ -180,37 +176,54 @@ def move_folder(folder_id: int, data: FolderMove, token: str):
     if folder["owner"] != user:
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    # Di chuyển vào chính nó?
+    # Tên không thay đổi?
+    if folder["name"] == data.name:
+        return {"message": "Name unchanged", "data": folder}
+
+    # Trùng tên trong cùng cha?
+    for f in folders.values():
+        if f["parent_id"] == folder["parent_id"] and f["name"] == data.name and f["id"] != folder_id:
+            raise HTTPException(status_code=409, detail="Folder name already exists in this location")
+
+    # Cập nhật path cascade
+    old_path = folder["path"]
+    parent_path = old_path.rsplit("/", 1)[0]
+    new_path = f"{parent_path}/{data.name}"
+
+    update_paths_recursive(folder_id, old_path, new_path)
+    folder["name"] = data.name
+
+    return {"message": "Folder renamed successfully", "data": folder}
+
+# 9. Di chuyển thư mục
+@app.patch("/folders/{folder_id}/move")
+def move_folder(folder_id: int, data: FolderMove, token: str):
+    user = get_current_user(token)
+    folder = folders.get(folder_id)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    if folder["owner"] != user:
+        raise HTTPException(status_code=403, detail="Permission denied")
     if data.target_parent_id == folder_id:
         raise HTTPException(status_code=400, detail="Cannot move folder into itself")
-
-    # Không thay đổi gì?
     if folder["parent_id"] == data.target_parent_id:
         return {"message": "Folder already at this location", "data": folder}
-
-    # Di chuyển vào con cháu?
     if data.target_parent_id is not None:
         if not folders.get(data.target_parent_id):
             raise HTTPException(status_code=404, detail="Target folder not found")
         if is_descendant(folder_id, data.target_parent_id):
             raise HTTPException(status_code=400, detail="Cannot move folder into its own subfolder")
-
-    # Trùng tên ở đích?
     for f in folders.values():
         if f["parent_id"] == data.target_parent_id and f["name"] == folder["name"] and f["id"] != folder_id:
             raise HTTPException(status_code=409, detail=f"Folder '{folder['name']}' already exists at target location")
-
-    # Cập nhật path cascade
     old_path = folder["path"]
     parent_path = get_parent_path(data.target_parent_id)
     new_path = f"{parent_path}/{folder['name']}"
-
     update_paths_recursive(folder_id, old_path, new_path)
     folder["parent_id"] = data.target_parent_id
-
     return {"message": "Folder moved successfully", "data": folder}
 
-# 9. Xóa thư mục
+# 10. Xóa thư mục
 @app.delete("/folders/{folder_id}")
 def delete_folder(folder_id: int, token: str):
     user = get_current_user(token)
@@ -219,8 +232,6 @@ def delete_folder(folder_id: int, token: str):
         raise HTTPException(status_code=404, detail="Folder not found")
     if folder["owner"] != user:
         raise HTTPException(status_code=403, detail="Permission denied")
-    
-    # Xóa cascade tất cả con cháu
     to_delete = []
     def collect(fid):
         to_delete.append(fid)
@@ -230,5 +241,4 @@ def delete_folder(folder_id: int, token: str):
     collect(folder_id)
     for fid in to_delete:
         folders.pop(fid, None)
-
     return {"message": "Folder deleted"}
