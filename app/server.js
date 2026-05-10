@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 
 const authRoutes = require('./routes/auth.routes');
+const folderRoutes = require('./routes/folder.routes');
 
 const app = express();
 
@@ -12,7 +13,7 @@ app.use(helmet());
 
 app.use(cors({
   origin: process.env.CLIENT_URL || '*',
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], // thêm PATCH
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
@@ -29,6 +30,7 @@ app.get('/health', (req, res) => {
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
+app.use('/api/folders', folderRoutes);
 
 // ── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
@@ -41,7 +43,6 @@ app.use((req, res) => {
 // ── Global Error Handler ──────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
-
   res.status(500).json({
     success: false,
     message: 'Lỗi server nội bộ'
