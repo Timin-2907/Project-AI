@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from database_mongo import activity_logs, login_logs, folder_logs
 from dependencies import get_current_user
-from models import User
+from app.models import User   # ← sửa dòng này
 
 router = APIRouter(prefix="/api/logs", tags=["Logs"])
 

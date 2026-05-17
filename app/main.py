@@ -1,41 +1,43 @@
+import sys
+sys.path.insert(0, "/app")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routes import auth
-from app.routes import folder
+from database import engine, Base
+from database_mongo import init_mongo_indexes
 
-app = FastAPI(
-    title="FastAPI Authentication API",
-    description="Authentication & Folder Management System",
-    version="1.0.0"
-)
+from app.models import User          # noqa
+from app.models_folder import Folder # noqa
 
-# CORS
+from app.routes.auth   import router as auth_router
+from app.routes.folder import router as folder_router
+from app.routes.logs   import router as logs_router
+
+app = FastAPI(title="Auth System API", version="2.0.0")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Routes
-app.include_router(auth.router)
-app.include_router(folder.router)
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    print("✅ PostgreSQL tables ready")
+    await init_mongo_indexes()
 
+@app.on_event("shutdown")
+async def shutdown():
+    await engine.dispose()
 
-# Root API
-@app.get("/")
-async def root():
-    return {
-        "success": True,
-        "message": "FastAPI server is running"
-    }
+app.include_router(auth_router)
+app.include_router(folder_router)
+app.include_router(logs_router)
 
-
-# Health Check
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "OK"
-    }
+@app.get("/health", tags=["Health"])
+async def health():
+    return {"status": "OK", "version": "2.0.0"}
