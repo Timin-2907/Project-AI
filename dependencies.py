@@ -2,11 +2,11 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload   # thêm dòng này
+from sqlalchemy.orm import selectinload
 
 from database import get_db
-from models import User
-from utils.security import decode_token
+from app.models import User
+from app.utils.security import decode_token
 
 bearer_scheme = HTTPBearer()
 
@@ -26,7 +26,6 @@ async def get_current_user(
 
     user_id = payload.get("user_id")
 
-    # thêm selectinload(User.role)
     result = await db.execute(
         select(User)
         .options(selectinload(User.role))

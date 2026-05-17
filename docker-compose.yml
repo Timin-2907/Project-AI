@@ -1,4 +1,5 @@
 services:
+
   db:
     image: postgres:15
     container_name: postgres_auth
@@ -12,6 +13,23 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/01_init.sql
       - ./migrate_folder.sql:/docker-entrypoint-initdb.d/02_migrate_folder.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d auth_system"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mongodb:
+    image: mongo:7
+    container_name: mongodb_auth
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: always
 
   redis:
     image: redis:7
@@ -21,7 +39,7 @@ services:
     restart: always
 
   app:
-    build: ./app
+    build: .
     container_name: fastapi_auth
     restart: always
     ports:
@@ -29,8 +47,13 @@ services:
     env_file:
       - .env
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
+      redis:
+        condition: service_started
 
 volumes:
   pgdata:
+  mongo_data:
