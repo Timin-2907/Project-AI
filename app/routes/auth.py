@@ -120,13 +120,11 @@ async def register(
         ExpiresAt=datetime.utcnow() + timedelta(minutes=10),
     )
 
-    db.add(verification)
-
     await db.commit()
 
-    asyncio.create_task(
-        send_verification_email(data.email, code)
-    )
+    # asyncio.create_task(
+    #     send_verification_email(data.email, code)
+    # )
 
     return MessageResponse(
         success=True,

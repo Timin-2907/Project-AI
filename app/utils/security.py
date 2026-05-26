@@ -1,19 +1,17 @@
 import random
 import secrets
+import hashlib
 from datetime import datetime, timedelta
-from passlib.context import CryptContext
 from jose import jwt, JWTError
 from config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(plain: str) -> str:
-    return pwd_context.hash(plain)
+    return hashlib.sha256(plain.encode()).hexdigest()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    return hashlib.sha256(plain.encode()).hexdigest() == hashed
 
 
 def generate_otp() -> str:
